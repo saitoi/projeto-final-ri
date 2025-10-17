@@ -1,0 +1,56 @@
+[Abstrato (conceitos relevantes)]
+
+BERT re-ranker:
+    - Tempo elevado de consulta/ altamente custoso.
+    - Score do BERT re-ranker captura o sinal de relevancia do BM25.
+
+BERT-based dense retrievers:
+    - Dense retrievers: Codificam consultas e documentos em embeddings com baixa dimensão.
+    - Supera custo do re-ranker, mas performam melhor quando interpolados com BM25.
+    - Dense retrievers codificam sinais de alta relevancia, mas falham em capturar sinais de baixa.
+
+[Introdução]
+
+    [Termos]
+    
+    DR := Dense Retriever
+
+Integrando BERT com pipeline de recuperação:
+    1. Modelo bag-of-words (+ prf) como primeiro estágio e re-rankear usando BERT as top-k passagens.
+    2. BERT re-ranker deve usar scores do BERT somente ou somar com os do BM25? Forma geral:
+
+    score(p) = alpha * bm25(p) + (1 - alpha) * bert(p) [1]
+
+    p := passagem
+
+Abordagem [1] pode ser usada com dense retrievers (exemplos: RepBERT e ANCE).
+
+Problema de re-rankers: Passo de inferência do BERT exigido em tempo de
+consulta para cada passage possui **alta latência**.
+
+Solução: Substituir a inferência por embeddings pré-computados para passagens.
+Porém resulta na perda de dependência entre (consulta e passagem) na criação
+dos embeddings.
+
+Modelo DR recente faz interpolação linear com BM25, mas também requer
+interpolação dos scores durante treinamento.
+
+    [Relevant Questions]
+
+    RQ1: BERT-based DRs codificam o mesmo sinal de relevancia do BM25?
+
+    RQ2: Descobertas obtidas com DRs generalizam para medições mais profundas além das rasas?
+
+        R: Analisamos usando métricas como nDCG@1k, MAP, recall@1k.
+
+    RQ3: Nível de efetividade alcançável com configuração de interpolação ótima entre DRs e BM25 por consulta.
+
+        R: Sistema de oráculo? consulta por consulta capaz de prover parametro ótimo de interpolação.
+
+[Setup Experimental]
+
+Datasets e avaliação:
+
+- MS MARCO Passage Dataset: Métricas MRR@10 e recall@1k.
+- TREC 2019 - 2020: nDCG@10 (=shallow) e nDCG@1k, MAP, recall@1k (=deep)
+- 

@@ -96,7 +96,7 @@ Acervo da Procuradoria Geral do Município do Rio de Janeiro.
 ### Estratégia de Interpolação
 
 $$
-s(p) = \alpha × ŝBM25(p) + (1 - \alpha) × sDR(p)
+s(p) = \alpha \cdot \text{ŝBM25}(p) + (1 - \alpha) \cdot \text{sDR}(p)
 $$
 
 onde:

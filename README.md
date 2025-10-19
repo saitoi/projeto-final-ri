@@ -1,5 +1,3 @@
-# Pitch
-
 ## Interpolação BM25 + Dense Retrievers no Contexto Jurídico Brasileiro
 
 <!--### O Problema-->
@@ -46,7 +44,6 @@ As três abordagens avaliadas serão:
 
 - BM25 (_baseline_).
 - Interpolação de scores entre BM25 e DRs (baseados ou não em BERT).
-- Interpolação de scores entre BM25 e embeddings densos.
 - Interpolação de scores entre BM25 e embeddings fine-tuned.
 
 > [!NOTE]
@@ -55,8 +52,8 @@ As três abordagens avaliadas serão:
 
 As métricas utilizadas incluem:
 
-- Métricas rasas: P@10, MRR@10, nDCG@10.
-- Métricas profundas: MAP, Recall@1000, nDCG@1000.
+- Métricas rasas: Avaliam a precisão local para o topo do Ranking (P@10, MRR@10, nDCG@10).
+- Métricas profundas: Medem a consistência global, se o sistema consegue capturar todos os relevantes (MAP, Recall@1000, nDCG@1000).
 
 O modelo fine-tuned (gte-finetune-pgm) foi treinado com a função de perda
 Multiple Negative Ranking Loss (MNRL) juntamente do Matryoshka Learning que
@@ -65,15 +62,16 @@ computacionais disponíveis.
 
 ### Relação com o Artigo Base
 
-O artigo base (_Recuperadores densos baseados em BERT exigem interpolação com
-BM25 para recuperação efetiva de passagens_) identificou ganhos expressivos ao
+O artigo base [1] identificou ganhos expressivos ao
 interpolar scores entre BM25 e DRs baseados em BERT (RepBERT, ANCE e CLEAR),
 sobretudo em métricas profundas.
 
-Embora o presente trabalho se baseie fortemente nesse artigo, também incorpora ideias de outros dois estudods:
+Embora o presente trabalho se baseie fortemente nesse artigo, também incorpora
+ideias de outros dois estudos:
 
-1. _JurisTCU: Um conjunto de dados de recuperação de informação em português do Brasil com julgamentos de relevância de consulta_.
-2. _Análise da Eficácia de Fine-Tuning de Embeddings no Contexto Jurídico Brasileiro_.
+1. [_Recuperadores densos baseados em BERT exigem interpolação com BM25 para recuperação efetiva de passagens_](https://arvinzhuang.github.io/publication/ICTIR2021InterpolateDR).
+2. [_JurisTCU: Um conjunto de dados de recuperação de informação em português do Brasil com julgamentos de relevância de consulta_](https://arxiv.org/abs/2503.08379).
+3. [_Análise da Eficácia de Fine-Tuning de Embeddings no Contexto Jurídico Brasileiro_](./articles-reference/article-matheus.pdf).
 
 <!--### Resultados Esperados-->
 <!--Baseado em experimentos preliminares:-->

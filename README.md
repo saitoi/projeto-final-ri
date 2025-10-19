@@ -1,170 +1,88 @@
-# Análise da Eficácia de Interpolação com Scores do BM25 no Contexto Jurídico Brasileiro
+# Pitch
 
-Busco avaliar a efetividade de técnicas de interpolação dos scores do BM25 com
-modelos de embeddings (GTE, JINA e GTE fine-tuned) no domínio jurídico
-brasileiro. A avaliação será feita sobre dois datasets complementares que
-representam diferentes cenários do contexto jurídico brasileiro.
+## Interpolação BM25 + Dense Retrievers no Contexto Jurídico Brasileiro
 
-## Modelos
+<!--### O Problema-->
+<!--Modelos de recuperação densa baseados em BERT revolucionaram a recuperação de informação,-->
+<!--mas pesquisas recentes (Wang et al., 2021) mostram que eles **necessitam-->
+<!--interpolação com BM25** para serem eficazes. Enquanto capturam bem sinais-->
+<!--fortes de relevância semântica, falham em sinais fracos. Será que isso se confirma no-->
+<!--domínio jurídico brasileiro, especialmente com modelos especializados via-->
+<!--fine-tuning?-->
 
-### 1. Alibaba-NLP/gte-multilingual-base
+### Proposta
 
-- **Arquitetura**: Adaptação do BERT
-- **Parâmetros**: 305 milhões
-- **Janela de contexto**: 8192 tokens
-- **Dimensão de representação**: 768 tokens (adaptável)
-- **Características**: Modelo multilingual com boa performance em português
+Avaliar a eficácia da interpolação entre modelos de recuperação densa e modelos
+tradicionais de recuperação da informação (BM25) no contexto jurídico
+brasileiro. Modelos de _embeddings_ costumam capturar bem sinais fortes de
+relevância semântica, mas tendem a falhar em sinais fracos associados a termos
+específicos, uma limitação que o BM25 pode compensar.
 
-### 2. jinaai/jina-embeddings-v3
-
-- **Arquitetura**: Baseado em XLM-RoBERTa
-- **Parâmetros**: 572 milhões
-- **Janela de contexto**: 8192 tokens
-- **Dimensão de representação**: 1024 tokens (adaptável)
-- **Características**: Inclui adaptadores LoRA para diferentes tarefas
-
-### 3. gte-finetune-pgm (Modelo ajustado)
-
-- **Base**: gte-multilingual-base
-- **Fine-tuning**: Especializado para domínio jurídico da PGM-Rio
-- **Técnicas utilizadas**:
-  - Multiple Negatives Ranking Loss (MNRL)
-  - Matryoshka Representation Learning (MRL)
-  - Hard negatives baseados em metadados
-- **Dimensões disponíveis**: [768, 512, 256, 128, 64]
-
-## Datasets
-
-### 1. JurisTCU
-Dataset em português brasileiro para recuperação da informação jurídica do Tribunal de Contas da União.
-
-**Características:**
-- **Documentos**: 16.045 documentos de jurisprudência selecionada
-- **Queries**: 150 consultas com julgamentos de relevância
-- **Grupos de queries**:
-  - **G1**: 50 queries reais de usuários (formato keyword, média de 3.5 palavras)
-  - **G2**: 50 queries sintéticas keyword-based (média de 6.5 palavras)
-  - **G3**: 50 queries sintéticas question-based (média de 16.5 palavras)
-- **Anotação**: Escala de 0-3 (irrelevante → altamente relevante)
-- **Método de anotação**: Híbrido (LLM + validação manual por especialista)
-
-**Estrutura dos documentos:**
-- Enunciado (SUMMARY): resumo da decisão (~47 palavras)
-- Excerto (EXCERPT): texto original que fundamenta o entendimento (~660 palavras)
-- Metadados: área, tema, subtema, relator, tipo de processo, etc.
-
-### 2. Dados PGM-Rio
-Acervo da Procuradoria Geral do Município do Rio de Janeiro.
-
-**Características:**
-- **Documentos**: 261.325 documentos (após filtragem)
-- **Processos**: 26.286 processos diferentes
-- **Segmentos**: 2.145.959 segmentos de 1024 tokens
-- **Formato**: Documentos digitais (PDF e HTML) ocerizados e/ou extraídos.
-- **Metadados principais**:
-  - `especializada`: Procuradoria responsável
-  - `tipo`: Tipo do documento (intimação, acórdão, decisão)
-  - `assunto_principal`: Assunto do processo
-  - `tipo_processo`: Tipo do processo
-
-**Tratamento dos dados:**
-
-- Foco exclusivo em documentos digitais (sem OCR) [Não estamos fazendo]
-- Segmentação recursiva respeitando limites semânticos
-- Agregação via mean pooling para representação de documentos completos
-
-## Metodologia
-
-### Abordagens de Busca
-
-**1. Busca interpolada entre BM25 e Dense Retrievers**
-
-...
-
-<!--**1. Busca Lexical (BM25 com Expansão de Documentos)**
-- BM25 baseline (k1=1.2, b=0.75)
-- Document expansion via docT5query
-- Document expansion via sinônimos (GPT-3.5, GPT-4o, Llama 3-70B)
-- Combinação de ambas as técnicas-->
-
-**2. Busca Semântica (Dense Retrievers)**
-
-- Embeddings BERT-based em português
-- Embeddings OpenAI (text-embedding-3-small e text-embedding-3-large)
-- Fine-tuned model (gte-finetune-pgm) em múltiplas dimensões
-
-### Estratégia de Interpolação
+A interpolação é realizada da seguinte forma:
 
 $$
-s(p) = \alpha \cdot \text{ŝBM25}(p) + (1 - \alpha) \cdot \text{sDR}(p)
+s(p) = \alpha \cdot s_{\text{BM25}} (p) + (1 - \alpha) \cdot s_{\text{BERT}} (p)
 $$
 
-onde:
-- $\alpha$ varia de 0 a 1 (passo de 0.1)
-- $ŝBM25(p)$: score normalizado do BM25
-- $sDR(p)$: score do dense retriever
+### Metodologia
 
-## Medidas de Avaliação
+O dataset utilizado será o JurisTCU, composto por 16 mil documentos
+jurisprudenciais do Tribunl de Contas da União e 150 consultas anotadas com
+julgamento de relevância.
 
-### Medidas Rasas (Shallow Metrics)
+As consultas são divididas em três categorias:
 
-- **Precision@10**: Precisão nos top-10 resultados
-- **MRR@10** (Mean Reciprocal Rank): Posição do primeiro documento relevante
-- **nDCG@10** (Normalized Discounted Cumulative Gain): Qualidade do ranking considerando ordem e relevância
+- Consultas de usuários.
+- Consultas sintéticas de palavras-chave.
+- Consultas sintéticas de frases completas.
 
-### Medidas Profundas (Deep Metrics)
+Entre os modelos de embeddings que serão avaliados, estão:
 
-- **Precision@20, Precision@1000**
-- **Recall@1000**: Cobertura dos documentos relevantes
-- **MAP** (Mean Average Precision): Precisão média em todos os níveis de recall
-- **nDCG@1000**: Qualidade do ranking em profundidade
+- General Text Embeddings (GTE) do Alibaba.
+- JINA Embeddings (JINA) do Jina AI.
+- Versão finetuned do GTE (GTE-Finetuned) treinado com o linguajar jurídico.
 
-## Relação com o Artigo Base
+As três abordagens avaliadas serão:
 
-O artigo base **"BERT-based Dense Retrievers Require Interpolation with BM25 for Effective Passage Retrieval"** (Wang et al., ICTIR 2021) investiga se dense retrievers baseados em BERT (RepBERT e ANCE) capturam os mesmos sinais de relevância que o BM25, e se a interpolação entre os scores melhora a eficácia da recuperação.
+- BM25 (_baseline_).
+- Interpolação de scores entre BM25 e DRs (baseados ou não em BERT).
+- Interpolação de scores entre BM25 e embeddings densos.
+- Interpolação de scores entre BM25 e embeddings fine-tuned.
 
-### Principais Descobertas do Artigo Base:
-1. **Dense retrievers necessitam interpolação com BM25**, diferentemente do BERT re-ranker
-2. **DRs são excelentes para sinais fortes de relevância**, mas falham em sinais fracos
-3. **Interpolação significativa**: Ganhos de até 48.5% em MAP (TREC DL 2019)
-4. **Dimensão profunda importa**: Melhoria substancial em métricas profundas (MAP, nDCG@1000)
+> [!NOTE]
+> Pretendo avaliar o desempenho da recuperação variando o parâmetro de
+> interpolação $\alpha$ no intervalo de 0 a 1.
 
-### Diferenças e Contribuições do Projeto:
-- **Contexto**: Aplicação ao domínio jurídico brasileiro (vs. MS MARCO em inglês)
-- **Datasets especializados**: JurisTCU e PGM-Rio (vs. datasets genéricos)
-- **Modelos multilíngues**: Foco em modelos com suporte a português
-- **Fine-tuning de domínio**: Avaliação de modelo especializado (gte-finetune-pgm)
-- **Múltiplas dimensões**: Análise do trade-off qualidade vs. custo computacional via MRL
-- **Tipos variados de queries**: Comparação entre queries reais, sintéticas keyword e question-based
+As métricas utilizadas incluem:
 
-## Resultados Esperados
+- Métricas rasas: P@10, MRR@10, nDCG@10.
+- Métricas profundas: MAP, Recall@1000, nDCG@1000.
 
-Com base nos estudos preliminares dos artigos:
+O modelo fine-tuned (gte-finetune-pgm) foi treinado com a função de perda
+Multiple Negative Ranking Loss (MNRL) juntamente do Matryoshka Learning que
+permite ajustar os embeddings a diferentes dimensões dependendo dos recursos
+computacionais disponíveis.
 
-- Confirmação da necessidade de interpolação no contexto jurídico brasileiro
-- **Ganhos significativos com fine-tuning**: Esperado ~23-28% de melhoria em nDCG@20
-- **Eficácia do MRL**: Embeddings de menor dimensão (256d) com performance próxima à dimensão máxima (768d)
-<!--4. **Superioridade de modelos OpenAI**: Especialmente em queries curtas (~70% de melhoria)-->
-<!--5. **Document expansion eficaz**: Melhorias de 45%+ em queries keyword curtas com docT5query + sinônimos-->
+### Relação com o Artigo Base
 
-## Questões de Pesquisa
+O artigo base (_Recuperadores densos baseados em BERT exigem interpolação com
+BM25 para recuperação efetiva de passagens_) identificou ganhos expressivos ao
+interpolar scores entre BM25 e DRs baseados em BERT (RepBERT, ANCE e CLEAR),
+sobretudo em métricas profundas.
 
-Questões de pesquisa inspiradas nas do [artigo base](./articles/article-base.pdf):
+Embora o presente trabalho se baseie fortemente nesse artigo, também incorpora ideias de outros dois estudods:
 
-1. **RQ1**: Dense retrievers especializados em português capturam os mesmos sinais de relevância que o BM25 no contexto jurídico?
+1. _JurisTCU: Um conjunto de dados de recuperação de informação em português do Brasil com julgamentos de relevância de consulta_.
+2. _Análise da Eficácia de Fine-Tuning de Embeddings no Contexto Jurídico Brasileiro_.
 
-2. **RQ2**: Os ganhos observados em medidas rasas se generalizam para medidas profundas?
-
-3. **RQ3**: O fine-tuning de domínio melhora a capacidade de interpolação dos dense retrievers?
-
-4. **RQ4**: Qual o impacto do tipo de query (real vs. sintética, keyword vs. question) na eficácia da interpolação?
-
-5. **RQ5**: Qual o trade-off ótimo entre dimensionalidade e qualidade via Matryoshka embeddings?
-
-**Obs**: As questões de pesquisa levantadas estão sujeitas a mudanças.
-
-## Referências
-
-- [Artigo base](./articles/article-base.pdf)
-- [Artigo sobre dataset do TCU](./articles/article-tcu.pdf)
-- [Artigo sobre fine-tuning de DRs no contexto jurídico](./articles/article-matheus.pdf)
+<!--### Resultados Esperados-->
+<!--Baseado em experimentos preliminares:-->
+<!--- **23-28%** de ganho em nDCG@20 com fine-tuning de domínio-->
+<!--- **70%** de melhoria com embeddings OpenAI em queries curtas-->
+<!--- **45%+** de ganho com document expansion em queries keyword-->
+<!--- Embeddings de **256 dimensões** mantêm ~95% da performance de 768d-->
+<!--### Contribuições-->
+<!--1. Primeiro estudo de interpolação BM25+DRs para **português jurídico**-->
+<!--2. Avaliação de **fine-tuning de domínio** na capacidade de interpolação-->
+<!--3. Análise do trade-off **qualidade vs. custo** via Matryoshka embeddings-->
+<!--4. Benchmark com **tipos variados de queries** (reais, sintéticas keyword, question-based)-->

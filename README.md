@@ -41,9 +41,9 @@ Entre os modelos de embeddings que serão avaliados, estão:
 As três abordagens avaliadas serão:
 
 - [BM25 (_baseline_)](https://github.com/xhluca/bm25s).
+- Modelos de embeddings (_baseline_).
 - Interpolação de scores entre BM25 e DRs (baseados ou não em BERT).
 - Interpolação de scores entre BM25 e embeddings fine-tuned.
-- Modelos de embeddings (_baseline_).
 
 > [!NOTE]
 > Pretendo avaliar o desempenho da recuperação variando o parâmetro de

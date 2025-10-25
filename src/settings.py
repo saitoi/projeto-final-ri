@@ -1,7 +1,9 @@
 from pydantic_settings import BaseSettings
-from functools import lru_cache
 from pydantic import SecretStr
+
+from functools import lru_cache
 import logging
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -12,10 +14,17 @@ logging.basicConfig(
     ]
 )
 
+model_map: dict[str, str] = {
+    "jina": "jinaai/jina-embeddings-v3",
+    "alibaba": "Alibaba-NLP/gte-multilingual-base",
+    "lamdec": "LAMDEC/gte-finetune-pgm"
+}
+
 class Settings(BaseSettings):
     DUCKDB_FILE: str = "dataset.duckdb"
 
-    EMBEDDING_MODEL: str = "LAMDEC/gte-finetune-pgm"
+    MODEL: str = "lamdec"
+    EMBEDDING_MODEL: str = model_map[MODEL]
     EMBEDDING_DIM: int = 768
     HF_TOKEN: SecretStr
 

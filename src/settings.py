@@ -1,9 +1,10 @@
-from pydantic_settings import BaseSettings
-from pydantic import SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import SecretStr, Field
 
 from functools import lru_cache
+from pathlib import Path
+from typing import Literal
 import logging
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -14,26 +15,50 @@ logging.basicConfig(
     ]
 )
 
-model_map: dict[str, str] = {
+EmbeddingVariant = Literal["jina", "alibaba", "lamdec"]
+BM25Variant = Literal["robertson", "atire", "bm25l", "bm25+", "lucene"]
+ModelType = Literal["bm25", "embeddings", "hybrid"]
+
+EMBEDDING_MODELS: dict[str, str] = {
     "jina": "jinaai/jina-embeddings-v3",
     "alibaba": "Alibaba-NLP/gte-multilingual-base",
     "lamdec": "LAMDEC/gte-finetune-pgm"
 }
 
 class Settings(BaseSettings):
-    DUCKDB_FILE: str = "dataset.duckdb"
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parent / ".env",
+        env_ignore_empty=True,
+        cli_parse_args=True,
+        extra="ignore",
+    )
 
-    MODEL: str = "lamdec"
-    EMBEDDING_MODEL: str = model_map[MODEL]
-    EMBEDDING_DIM: int = 768
-    HF_TOKEN: SecretStr
+    # Database
+    database: str = Field(default="dataset.duckdb", description="Database file path")
 
-    CHUNK_SIZE: int = 1024
-    CHUNK_OVERLAP: int = 0
+    # Pre-processing
+    preprocess: bool = False
 
-    EMBEDDING_BATCH_SIZE: int = 100
+    # Universal
+    model: ModelType = "bm25"
+    alpha: float = 0.5
+    k: int = 10
+    query: str = ""
+    build: bool = False
 
-    EMBEDDINGS_GPU_ID: int = 1
+    # Embeddings
+    embedding_variant: EmbeddingVariant = "lamdec"
+    embedding_dim: int = 768
+    embedding_batch_size: int = 100
+    embedding_gpu_id: int = 1
+    hf_token: SecretStr | None = None
+
+    chunk_size: int = 1024
+    chunk_overlap: int = 0
+
+    # Bm25 Related
+    bm25_dir: str = "./bm25-model"
+    bm25_variant: BM25Variant = "lucene"
 
 @lru_cache()
 def get_settings() -> Settings:

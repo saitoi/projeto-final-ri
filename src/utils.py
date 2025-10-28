@@ -1,15 +1,16 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
+import numpy as np
 import torch
 
-from settings import get_settings, get_logger
+from settings import get_settings, get_logger, EMBEDDING_MODELS
 
 logger = get_logger(__name__)
 
 def create_chunks(text: str) -> list[str]:
     settings = get_settings()
     text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=settings.CHUNK_SIZE, chunk_overlap=settings.CHUNK_OVERLAP
+        chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap
     )
     if not text.strip():
         return []
@@ -20,28 +21,41 @@ def create_chunks(text: str) -> list[str]:
 def create_embedding_model() -> SentenceTransformer:
     settings = get_settings()
     gpu_count: int = torch.cuda.device_count()
-    gpu_id: int = settings.EMBEDDINGS_GPU_ID
+    gpu_id: int = settings.embedding_gpu_id
     device: str = "cpu"
     if torch.cuda.is_available():
         if not (0 <= gpu_id < gpu_count):
-            raise ValueError(f"Seu animal. ID: {gpu_id} invalido")
+            raise ValueError(
+                f"Invalid GPU id '{gpu_id}'. Available CUDA devices: {gpu_count}"
+            )
         device = f"cuda:{gpu_id}"
     logger.info(f"Device: {device}")
+
+    # Mapear o variant para o modelo real
+    model_name = EMBEDDING_MODELS[settings.embedding_variant]
+
     try:
         model = SentenceTransformer(
-            settings.EMBEDDING_MODEL,
+            model_name,
             trust_remote_code=True,
-            token=settings.HF_TOKEN.get_secret_value(),
+            token=settings.hf_token.get_secret_value() if settings.hf_token else None,
         )
         model.to(device)
         return model
     except Exception as e:
         raise Exception(
-            f"Falha ao carregar o modelo '{settings.EMBEDDING_MODEL}': {e}"
+            f"Falha ao carregar o modelo '{model_name}': {e}"
         )
-        
+
 def create_embeddings(
     texts: list[str], model: SentenceTransformer
 ) -> list[list[float]]:
     embeddings = model.encode(texts, normalize_embeddings=True)
     return embeddings.tolist()
+
+def _embed_text(text: str, model: SentenceTransformer) -> list[float]:
+    chunks = create_chunks(text)
+    if len(chunks) == 0:
+        return []
+    embeddings = create_embeddings(chunks, model)
+    return np.mean(embeddings, axis=0).tolist()

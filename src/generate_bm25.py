@@ -110,7 +110,7 @@ def query_bm25(retriever, query_text: str, k: int = 10) -> list[dict[str, Any]]:
 def show_results(results: list[dict]) -> None:
     from prettytable import PrettyTable
     if not results:
-        logger.info("Nenhum resultado encontrado.")
+        logger.warning("Nenhum resultado encontrado.")
         return
 
     table = PrettyTable()
@@ -118,9 +118,7 @@ def show_results(results: list[dict]) -> None:
     # table.max_width["Conteúdo"] = 80
 
     for item in results:
-        content: str = item.get("text") or ""
-        content: str = content[:100] + "..." if len(content) > 100 else content
-
+        content: str = (t := item.get("text") or "")[:100] + ("..." if len(t) > 100 else "")
         table.add_row([
             item.get("rank", ""),
             item.get("docid", ""),

@@ -8,6 +8,7 @@
 #     "tqdm",
 #     "torch",
 #     "pydantic-settings",
+#     "prettytable",
 # ]
 # ///
 
@@ -66,7 +67,7 @@ def chunk_embedding(model: SentenceTransformer, conn: DuckDBPyConnection):
 
     batch: list[tuple[int, int]] = []
     texts: list[str] = []
-    batch_size = 100
+    batch_size = 1_000
 
     for docid, chunk_index, text in tqdm(chunks, desc="Gerando embeddings"):
         texts.append(text)
@@ -97,25 +98,43 @@ def build_embeddings(model: SentenceTransformer, db_filepath: str):
     finally:
         conn.close()
 
-def query_embeddings(query: str, model: SentenceTransformer, db_filepath: str):
+def query_embeddings(query: str, k: int, model: SentenceTransformer, db_filepath: str) -> list[tuple[int, str, float]]:
     conn: DuckDBPyConnection = duckdb.connect(db_filepath)
 
     try:
         logger.info("Pesquisando embeddings mais similares...")
         query_embedding: list[float] = _embed_text(query, model)
-        res = conn.execute(queries.SEARCH_EMBEDDING_TEXTO, [query_embedding]).fetchall()
+        res = conn.execute(queries.SEARCH_EMBEDDING_TEXTO, [query_embedding, k]).fetchall()
         return res
     finally:
         conn.close()
 
+def show_results(results: list[tuple[int, str, float]]):
+    from prettytable import PrettyTable
+    if not results:
+        logger.warning("Nenhum resultado encontrado.")
+        return
+
+    table = PrettyTable()
+    table.field_names = ["DocID", "Score", "Conteúdo"]
+    for item in results:
+        content: str = (t := item[1] or "")[:100] + ("..." if len(t) > 100 else "")
+        table.add_row([
+            item[0],
+            item[2],
+            content
+        ])
+
+    print(table)
+
 if __name__ == "__main__":
     settings: Settings = get_settings()
-
-    model = create_embedding_model()
+    model: SentenceTransformer = create_embedding_model()
 
     if settings.build:
+        logger.info("Iniciando a construção dos embeddings...")
         build_embeddings(model=model, db_filepath=settings.database)
 
     if settings.query:
-        res = query_embeddings(query=settings.query, model=model, db_filepath=settings.database)
-        print(res)
+        results: list[tuple[int, str, float]] = query_embeddings(query=settings.query, k=settings.k, model=model, db_filepath=settings.database)
+        show_results(results)

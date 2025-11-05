@@ -4,7 +4,6 @@ CREATE_CHUNKS_TABLE = """
         chunk_index INTEGER NOT NULL,
         tokens INTEGER NOT NULL,
         text TEXT NOT NULL,
-        model varchar(20) not null,
         PRIMARY KEY (docid, chunk_index)
     );
 """
@@ -90,7 +89,7 @@ INSERT OR REPLACE INTO doc_embeddings (docid, embedding, model)
 SELECT
     docid,
     list(value ORDER BY idx) AS embedding,
-    model
+    ? AS model
 FROM (
     SELECT
         docid,
@@ -102,6 +101,7 @@ FROM (
             unnest(embedding) AS value,
             generate_subscripts(embedding, 1) AS idx
         FROM doc_chunk_embeddings
+        WHERE model = ?
     )
     GROUP BY docid, idx
 )

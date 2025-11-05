@@ -62,10 +62,10 @@ def chunk_embedding(
             return
         embeddings = create_embeddings(texts, model)
         rows = [
-            (int(docid), int(chunk_index), embedding)
+            (int(docid), int(chunk_index), embedding, variant)
             for (docid, chunk_index), embedding in zip(entries, embeddings, strict=True)
         ]
-        conn.executemany(queries.INSERT_CHUNK_EMBEDDING, rows, variant)
+        conn.executemany(queries.INSERT_CHUNK_EMBEDDING, rows)
         entries.clear()
         texts.clear()
 
@@ -101,7 +101,7 @@ def build_embeddings(
         logger.info("Iniciando o embedding dos segmentos...")
         chunk_embedding(model=model, variant=variant, conn=conn)
         logger.info("Agregando os embeddings...")
-        conn.execute(queries.AGGREGATE_MEAN_POOLING, variant)
+        conn.execute(queries.AGGREGATE_MEAN_POOLING, [variant, variant])
     finally:
         conn.close()
 

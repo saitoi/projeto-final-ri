@@ -47,20 +47,6 @@ EXTRACT_TEXT = """
         texto = extract_text(texto);
 """
 
-REFRESH_TEXT = """
-    ;update docs
-    set texto = trim(
-        concat_ws(
-            ' ',
-            coalesce(enunciado, ''),
-            coalesce(excerto, ''),
-            coalesce(tema, ''),
-            coalesce(subtema, ''),
-            coalesce(indexacao, '')
-        )
-    );
-"""
-
 # Consultas de Pré-processamento aplicadas à consulta também
 
 REPLACEMENTS = r"""

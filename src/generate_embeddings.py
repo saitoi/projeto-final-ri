@@ -16,8 +16,10 @@ import duckdb
 import tiktoken
 from duckdb import DuckDBPyConnection
 from tqdm import tqdm
+from typing import Any
 
 import queries
+from settings import EmbeddingVariant
 from settings import Settings, get_logger, get_settings
 from utils import create_chunks, create_embedding_model, create_embeddings, _embed_text
 from sentence_transformers import SentenceTransformer
@@ -50,8 +52,10 @@ def chunking(conn: DuckDBPyConnection):
         conn.executemany(queries.INSERT_CHUNK, batch)
 
 
-def chunk_embedding(model: SentenceTransformer, conn: DuckDBPyConnection):
-    chunks = conn.execute(queries.GET_PENDING_CHUNKS).fetchall()
+def chunk_embedding(
+    model: SentenceTransformer, variant: EmbeddingVariant, conn: DuckDBPyConnection
+):
+    chunks = conn.execute(queries.GET_PENDING_CHUNKS, variant).fetchall()
 
     def process_batch(entries: list[tuple[int, int]], texts: list[str]):
         if not entries:
@@ -61,7 +65,7 @@ def chunk_embedding(model: SentenceTransformer, conn: DuckDBPyConnection):
             (int(docid), int(chunk_index), embedding)
             for (docid, chunk_index), embedding in zip(entries, embeddings, strict=True)
         ]
-        conn.executemany(queries.INSERT_CHUNK_EMBEDDING, rows)
+        conn.executemany(queries.INSERT_CHUNK_EMBEDDING, rows, variant)
         entries.clear()
         texts.clear()
 
@@ -80,7 +84,10 @@ def chunk_embedding(model: SentenceTransformer, conn: DuckDBPyConnection):
         logger.info("Processando batch restante..")
         process_batch(batch, texts)
 
-def build_embeddings(model: SentenceTransformer, db_filepath: str):
+
+def build_embeddings(
+    model: SentenceTransformer, variant: EmbeddingVariant, db_filepath: str
+):
     conn: DuckDBPyConnection = duckdb.connect(db_filepath)
 
     try:
@@ -92,25 +99,37 @@ def build_embeddings(model: SentenceTransformer, db_filepath: str):
         logger.info("Iniciando a segmentação...")
         chunking(conn)
         logger.info("Iniciando o embedding dos segmentos...")
-        chunk_embedding(model, conn)
+        chunk_embedding(model=model, variant=variant, conn=conn)
         logger.info("Agregando os embeddings...")
-        conn.execute(queries.AGGREGATE_MEAN_POOLING)
+        conn.execute(queries.AGGREGATE_MEAN_POOLING, variant)
     finally:
         conn.close()
 
-def query_embeddings(query: str, k: int, model: SentenceTransformer, db_filepath: str) -> list[tuple[int, str, float]]:
+
+def query_embeddings(
+    query: str, k: int, model: SentenceTransformer, db_filepath: str
+) -> list[dict[str, Any]]:
     conn: DuckDBPyConnection = duckdb.connect(db_filepath)
 
     try:
         logger.info("Pesquisando embeddings mais similares...")
         query_embedding: list[float] = _embed_text(query, model)
-        res = conn.execute(queries.SEARCH_EMBEDDING_TEXTO, [query_embedding, k]).fetchall()
-        return res
+        res = conn.execute(
+            queries.SEARCH_EMBEDDING_TEXTO, [query_embedding, k]
+        ).fetchall()
+        # similaridade sendo ignorada por enquanto
+        res_dict: list[dict[str, Any]] = [
+            {"rank": i, "docid": d, "texto": t}
+            for i, d, t, _ in enumerate(res, start=1)
+        ]
+        return res_dict
     finally:
         conn.close()
 
+
 def show_results(results: list[tuple[int, str, float]]):
     from prettytable import PrettyTable
+
     if not results:
         logger.warning("Nenhum resultado encontrado.")
         return
@@ -119,13 +138,10 @@ def show_results(results: list[tuple[int, str, float]]):
     table.field_names = ["DocID", "Score", "Conteúdo"]
     for item in results:
         content: str = (t := item[1] or "")[:100] + ("..." if len(t) > 100 else "")
-        table.add_row([
-            item[0],
-            item[2],
-            content
-        ])
+        table.add_row([item[0], item[2], content])
 
     print(table)
+
 
 if __name__ == "__main__":
     settings: Settings = get_settings()
@@ -133,8 +149,17 @@ if __name__ == "__main__":
 
     if settings.build:
         logger.info("Iniciando a construção dos embeddings...")
-        build_embeddings(model=model, db_filepath=settings.database)
+        build_embeddings(
+            model=model,
+            variant=settings.embedding_variant,
+            db_filepath=settings.database,
+        )
 
     if settings.query:
-        results: list[tuple[int, str, float]] = query_embeddings(query=settings.query, k=settings.k, model=model, db_filepath=settings.database)
+        results: list[dict[str, Any]] = query_embeddings(
+            query=settings.query,
+            k=settings.k,
+            model=model,
+            db_filepath=settings.database,
+        )
         show_results(results)

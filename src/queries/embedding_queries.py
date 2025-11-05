@@ -4,6 +4,7 @@ CREATE_CHUNKS_TABLE = """
         chunk_index INTEGER NOT NULL,
         tokens INTEGER NOT NULL,
         text TEXT NOT NULL,
+        model varchar(20) not null,
         PRIMARY KEY (docid, chunk_index)
     );
 """
@@ -12,7 +13,8 @@ CREATE_CHUNKS_EMBEDDINGS_TABLE = """
     CREATE TABLE IF NOT EXISTS doc_chunk_embeddings (
         docid BIGINT,
         chunk_index INTEGER NOT NULL,
-        embedding FLOAT[],
+        embedding FLOAT[768],
+        model varchar(20) not null,
         PRIMARY KEY (docid, chunk_index)
     );
 """
@@ -20,7 +22,8 @@ CREATE_CHUNKS_EMBEDDINGS_TABLE = """
 CREATE_EMBEDDINGS_TABLE = """
     CREATE TABLE IF NOT EXISTS doc_embeddings (
         docid BIGINT,
-        embedding FLOAT[],
+        embedding FLOAT[768],
+        model varchar(20) not null,
         PRIMARY KEY (docid)
     );
 """
@@ -43,13 +46,14 @@ GET_PENDING_CHUNKS = """
     FROM doc_chunks
     WHERE (docid, chunk_index) NOT IN (
         SELECT docid, chunk_index FROM doc_chunk_embeddings
+        where model = ?
     )
     ORDER BY docid, chunk_index;
 """
 
 INSERT_CHUNK_EMBEDDING = """
-    INSERT OR REPLACE INTO doc_chunk_embeddings (docid, chunk_index, embedding)
-    VALUES (?, ?, ?);
+    INSERT OR REPLACE INTO doc_chunk_embeddings (docid, chunk_index, embedding, model)
+    VALUES (?, ?, ?, ?);
 """
 
 SELECT_CHUNK_EMBEDDINGS = """
@@ -82,12 +86,26 @@ GET_DOC_EMBEDDINGS = """
 """
 
 AGGREGATE_MEAN_POOLING = """
-    INSERT OR REPLACE INTO doc_embeddings (docid, embedding)
+INSERT OR REPLACE INTO doc_embeddings (docid, embedding, model)
+SELECT
+    docid,
+    list(value ORDER BY idx) AS embedding,
+    model
+FROM (
     SELECT
         docid,
-        avg(embedding) AS embedding
-    FROM doc_chunk_embeddings
-    GROUP BY docid;
+        idx,
+        avg(value) AS value
+    FROM (
+        SELECT
+            docid,
+            unnest(embedding) AS value,
+            generate_subscripts(embedding, 1) AS idx
+        FROM doc_chunk_embeddings
+    )
+    GROUP BY docid, idx
+)
+GROUP BY docid;
 """
 
 SEARCH_EMBEDDING_TEXTO = """
@@ -96,6 +114,7 @@ SEARCH_EMBEDDING_TEXTO = """
     select
         d.docid,
         d.texto,
-        sim:array_cosine_similarity(de.embedding, ?) as similarity
+        sim:array_cosine_similarity(de.embedding::float[768], ?::float[768])
     order by sim desc
+    limit ?;
 """

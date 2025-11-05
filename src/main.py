@@ -10,7 +10,7 @@
 # ///
 
 import math
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, Any
 
 import duckdb
 from prettytable import PrettyTable
@@ -240,7 +240,8 @@ def main() -> None:
                     variant=settings.bm25_variant,
                     build=False,
                 )
-                results = query_bm25(retriever, settings.query, k=settings.k)
+                results: list[dict[str, Any]] = query_bm25(retriever, settings.query, k=settings.k)
+                show_results(results)
                 for item in results:
                     item["strategy"] = "bm25"
 

@@ -215,5 +215,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Reference Repo
+# Reference Repos
 reference-repo/
+bm25s/
+pyserini/

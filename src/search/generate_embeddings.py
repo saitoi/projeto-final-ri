@@ -6,22 +6,35 @@
 #     "sentence-transformers",
 #     "tiktoken",
 #     "tqdm",
-#     "torch",
+#     "torch>=2.2",
 #     "pydantic-settings",
 #     "prettytable",
+#     "einops",
+#     "nltk",
 # ]
 # ///
 
 import duckdb
 import tiktoken
+import sys
+from pathlib import Path
 from duckdb import DuckDBPyConnection
 from tqdm import tqdm
 from typing import Any
 
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import queries
 from settings import EmbeddingVariant
 from settings import Settings, get_logger, get_settings
-from utils import create_chunks, create_embedding_model, create_embeddings, _embed_text
+
+# Import directly from module to avoid circular imports
+if __name__ == "__main__":
+    from search.utils import create_chunks, create_embedding_model, create_embeddings, _embed_text
+else:
+    from .utils import create_chunks, create_embedding_model, create_embeddings, _embed_text
+
 from sentence_transformers import SentenceTransformer
 
 logger = get_logger(__name__)
@@ -55,14 +68,15 @@ def chunking(conn: DuckDBPyConnection):
 def chunk_embedding(
     model: SentenceTransformer, variant: EmbeddingVariant, conn: DuckDBPyConnection
 ):
-    chunks = conn.execute(queries.GET_PENDING_CHUNKS, variant).fetchall()
+    chunks = conn.execute(queries.GET_PENDING_CHUNKS, [variant]).fetchall()
 
     def process_batch(entries: list[tuple[int, int]], texts: list[str]):
         if not entries:
             return
         embeddings = create_embeddings(texts, model)
+        print(len(embeddings))
         rows = [
-            (int(docid), int(chunk_index), embedding, variant)
+            (int(docid), int(chunk_index), embedding[:768], variant)
             for (docid, chunk_index), embedding in zip(entries, embeddings, strict=True)
         ]
         conn.executemany(queries.INSERT_CHUNK_EMBEDDING, rows)
@@ -107,59 +121,81 @@ def build_embeddings(
 
 
 def query_embeddings(
-    query: str, k: int, model: SentenceTransformer, db_filepath: str
+        query: str, k: int, model: SentenceTransformer, variant: EmbeddingVariant, db_filepath: str
 ) -> list[dict[str, Any]]:
-    conn: DuckDBPyConnection = duckdb.connect(db_filepath)
+    conn: DuckDBPyConnection = duckdb.connect(db_filepath, read_only=True)
 
     try:
         logger.info("Pesquisando embeddings mais similares...")
         query_embedding: list[float] = _embed_text(query, model)
         res = conn.execute(
-            queries.SEARCH_EMBEDDING_TEXTO, [query_embedding, k]
+                queries.SEARCH_EMBEDDING_TEXTO, [query_embedding[:768], variant, k]
         ).fetchall()
         # similaridade sendo ignorada por enquanto
         res_dict: list[dict[str, Any]] = [
-            {"rank": i, "docid": d, "texto": t}
-            for i, d, t, _ in enumerate(res, start=1)
+            {"rank": i, "docid": d, "texto": t, "score": s}
+            for i, (d, t, s) in enumerate(res, start=1)
         ]
         return res_dict
     finally:
         conn.close()
 
 
-def show_results(results: list[tuple[int, str, float]]):
+def show_results(results: list[dict[str, Any]], variant: str):
     from prettytable import PrettyTable
-
     if not results:
         logger.warning("Nenhum resultado encontrado.")
         return
 
     table = PrettyTable()
-    table.field_names = ["DocID", "Score", "Conteúdo"]
+    table.field_names = ["DocID", "Conteúdo"]
+    logger.info("Results for %s embeddings..", variant)
     for item in results:
-        content: str = (t := item[1] or "")[:100] + ("..." if len(t) > 100 else "")
-        table.add_row([item[0], item[2], content])
+        content: str = (t := item.get("texto") or "")[:100] + ("..." if len(t) > 100 else "")
+        table.add_row([item.get("docid"), content])
 
     print(table)
 
 
 if __name__ == "__main__":
     settings: Settings = get_settings()
-    model: SentenceTransformer = create_embedding_model()
 
     if settings.build:
-        logger.info("Iniciando a construção dos embeddings...")
-        build_embeddings(
-            model=model,
-            variant=settings.embedding_variant,
-            db_filepath=settings.database,
-        )
+        # Build multiple variants if embedding_variants is specified
+        if settings.embedding_variants:
+            logger.info(f"Building {len(settings.embedding_variants)} embedding variants: {settings.embedding_variants}")
+            for variant in settings.embedding_variants:
+                logger.info(f"\n{'='*60}")
+                logger.info(f"Building variant: {variant}")
+                logger.info(f"{'='*60}")
+                # Create model for each variant
+                model: SentenceTransformer = create_embedding_model(variant=variant)
+                build_embeddings(
+                    model=model,
+                    variant=variant,
+                    db_filepath=settings.database,
+                )
+            logger.info(f"\n{'='*60}")
+            logger.info(f"All {len(settings.embedding_variants)} variants built successfully!")
+            logger.info(f"{'='*60}")
+        else:
+            # Build single variant (default)
+            logger.info("Iniciando a construção dos embeddings...")
+            model: SentenceTransformer = create_embedding_model()
+            build_embeddings(
+                model=model,
+                variant=settings.embedding_variant,
+                db_filepath=settings.database,
+            )
 
     if settings.query:
+        variant: str = settings.embedding_variant
+        model: SentenceTransformer = create_embedding_model(variant=variant)
         results: list[dict[str, Any]] = query_embeddings(
             query=settings.query,
             k=settings.k,
             model=model,
+            variant=variant,
             db_filepath=settings.database,
         )
-        show_results(results)
+        show_results(results, variant)

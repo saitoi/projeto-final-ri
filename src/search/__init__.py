@@ -13,6 +13,8 @@ __all__ = [
     "create_embedding_model",
     "create_embeddings",
     "create_chunks",
+    "query_hybrid",
+    "normalize_scores",
     "reciprocal_rank_fusion",
     "rerank_results",
     "create_ranker",

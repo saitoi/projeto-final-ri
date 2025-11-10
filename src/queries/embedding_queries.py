@@ -14,7 +14,7 @@ CREATE_CHUNKS_EMBEDDINGS_TABLE = """
         chunk_index INTEGER NOT NULL,
         embedding FLOAT[768],
         model varchar(20) not null,
-        PRIMARY KEY (docid, chunk_index)
+        PRIMARY KEY (docid, model, chunk_index)
     );
 """
 
@@ -23,15 +23,15 @@ CREATE_EMBEDDINGS_TABLE = """
         docid BIGINT,
         embedding FLOAT[768],
         model varchar(20) not null,
-        PRIMARY KEY (docid)
+        PRIMARY KEY (docid, model)
     );
 """
 
 GET_DOCS_FOR_CHUNKING = """
-    SELECT docid, texto
+    SELECT docid, summary
     FROM docs
-    WHERE texto IS NOT NULL
-      AND length(trim(texto)) > 0
+    WHERE summary IS NOT NULL
+      AND length(trim(summary)) > 0
     ORDER BY docid;
 """
 
@@ -53,35 +53,6 @@ GET_PENDING_CHUNKS = """
 INSERT_CHUNK_EMBEDDING = """
     INSERT OR REPLACE INTO doc_chunk_embeddings (docid, chunk_index, embedding, model)
     VALUES (?, ?, ?, ?);
-"""
-
-SELECT_CHUNK_EMBEDDINGS = """
-    SELECT docid, chunk_index, embedding
-    FROM doc_chunk_embeddings
-    ORDER BY docid, chunk_index;
-"""
-
-DELETE_DOC_EMBEDDING = """
-    DELETE FROM doc_embeddings WHERE docid = ?;
-"""
-
-INSERT_DOC_EMBEDDING = """
-    INSERT OR REPLACE INTO doc_embeddings (docid, embedding)
-    VALUES (?, ?);
-"""
-
-GET_DOC_EMBEDDINGS = """
-    SELECT
-        e.docid,
-        e.embedding,
-        d.texto,
-        d.tema,
-        d.subtema,
-        d.enunciado,
-        d.excerto
-    FROM doc_embeddings e
-    JOIN docs d ON d.docid = e.docid
-    WHERE e.embedding IS NOT NULL;
 """
 
 AGGREGATE_MEAN_POOLING = """
@@ -113,8 +84,9 @@ SEARCH_EMBEDDING_TEXTO = """
     inner join docs d on d.docid = de.docid
     select
         d.docid,
-        d.texto,
-        sim:array_cosine_similarity(de.embedding::float[768], ?::float[768])
+        d.summary,
+        sim:array_cosine_similarity(de.embedding, ?::float[768])
+    where de.model = ?
     order by sim desc
     limit ?;
 """

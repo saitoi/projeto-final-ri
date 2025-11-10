@@ -9,7 +9,7 @@ GET_DOC_TEXTS = """
         texto,
         tema,
         subtema,
-        enunciado,
+        summary,
         excerto
     FROM docs
     WHERE texto IS NOT NULL

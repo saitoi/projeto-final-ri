@@ -570,11 +570,11 @@ def run_grid_search_all_variants(
 ):
     """Run grid search for all BM25 variants and compare."""
     variants: list[BM25Variant] = [
-        # "robertson",
+        "robertson",
         "lucene",
-        # "atire",
-        # "bm25l",
-        # "bm25+"
+        "atire",
+        "bm25l",
+        "bm25+"
     ]
 
     all_best_configs = {}

@@ -87,15 +87,17 @@ log "Query groups: ${QUERY_GROUPS[*]}"
 log "Note: Pyserini will be skipped (no custom parameters)"
 
 for group in "${QUERY_GROUPS[@]}"; do
-    log ""
-    log "${BLUE}>>> Query Group $group <<<${NC}"
+    for variant in "${BM25_VARIANTS[@]}"; do
+        log ""
+        log "${BLUE}>>> Query Group $group <<<${NC}"
 
-    # Grid search para todos os BM25 variants (exceto pyserini)
-    task_name="BM25 Grid Search - Group $group"
-    task_cmd="BM25_GRID_SEARCH=1 uv run src/benchmarks/main.py --variant bm25 --query_group $group"
-    log_file="$LOGS_DIR/bm25_grid_search_group${group}_${TIMESTAMP}.log"
+        # Grid search para todos os BM25 variants (exceto pyserini)
+        task_name="BM25 Grid Search - Group $group"
+        task_cmd="BM25_GRID_SEARCH=1 uv run src/benchmarks/main.py --variant bm25 --bm25_variant $variant --query_group $group"
+        log_file="$LOGS_DIR/bm25_grid_search_group${group}_${TIMESTAMP}.log"
 
-    run_task "$task_name" "$task_cmd" "$log_file"
+        run_task "$task_name" "$task_cmd" "$log_file"
+    done
 done
 
 # ==========================================

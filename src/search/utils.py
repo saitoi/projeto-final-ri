@@ -30,9 +30,6 @@ def create_embedding_model(variant: str | None = None) -> SentenceTransformer:
             )
         device = f"cuda:{gpu_id}"
     logger.info(f"Device: {device}")
-
-    # Mapear o variant para o modelo real
-    # Use provided variant or fall back to settings
     embedding_variant = variant if variant is not None else settings.embedding_variant
     model_name = EMBEDDING_MODELS[embedding_variant]
 

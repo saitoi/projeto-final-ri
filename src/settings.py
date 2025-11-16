@@ -16,7 +16,7 @@ logging.basicConfig(
 )
 
 EmbeddingVariant = Literal["jina", "alibaba", "lamdec", "gemma", "qwen", "lamdec-qwen", "lamdec-gemma", "lamdec-gte"]
-BM25Variant = Literal["robertson", "atire", "bm25l", "bm25+", "lucene", "pyserini"]
+BM25Variant = Literal["robertson", "atire", "bm25l", "bm25+", "lucene", "pyserini", "bmx"]
 ModelType = Literal["bm25", "embeddings", "hybrid"]
 
 EMBEDDING_MODELS: dict[str, str] = {
@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     bm25_variant: BM25Variant = "lucene"
     bm25_variants: list[BM25Variant] | None = Field(
         default=None,
-        description="Build multiple BM25 variants at once (comma-separated: robertson,atire,bm25l,bm25+,lucene)"
+        description="Build multiple BM25 variants at once (comma-separated: robertson,atire,bm25l,bm25+,lucene,pyserini,bmx)"
     )
     k1: float = Field(default=.5, description="BM25 k1 parameter")
     b: float = Field(default=.75, description="BM25 b parameter")

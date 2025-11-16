@@ -13,6 +13,7 @@
 #     "tiktoken",
 #     "torch",
 #     "tqdm",
+#     "baguetter",
 # ]
 # ///
 
@@ -41,7 +42,9 @@ def create_bm25_retriever(
     db_path: str,
     k1: float = 1.5,
     b: float = 0.75,
-    delta: float = 0.5
+    delta: float = 0.5,
+    alpha: float | None = None,
+    beta: float | None = None
 ) -> RetrievalFn:
     """Create BM25 retriever with custom parameters."""
     with duckdb.connect(db_path, read_only=True) as conn:
@@ -55,6 +58,17 @@ def create_bm25_retriever(
 
         def retrieve(query: str, k: int) -> list[str]:
             results = query_pyserini(retriever=retriever, query=query, k=k)
+            return [str(result["docid"]) for result in results]
+
+        return retrieve
+
+    # Handle bmx separately
+    if variant == "bmx":
+        from search._bmx import build_bmx, query_bmx
+        retriever = build_bmx(corpus=corpus, model_dir="bm25_models/bm25", build=False, k1=k1, b=b, alpha=alpha, beta=beta)
+
+        def retrieve(query: str, k: int) -> list[str]:
+            results = query_bmx(retriever=retriever, query=query, k=k)
             return [str(result["docid"]) for result in results]
 
         return retrieve
@@ -102,6 +116,8 @@ def create_hybrid_retriever(
     hybrid_variant: str = "rrf",
     k1: float = 1.5,
     b: float = 0.75,
+    alpha: float | None = None,
+    beta: float | None = None,
 ) -> RetrievalFn:
     """Create hybrid retriever combining BM25 and embeddings."""
     from search.utils_hybrid import reciprocal_rank_fusion, rerank_results, create_ranker
@@ -117,6 +133,13 @@ def create_hybrid_retriever(
 
         def query_bm25_fn(query: str, k: int):
             return query_pyserini(retriever=bm25_retriever, query=query, k=k)
+    # Handle bmx separately
+    elif bm25_variant == "bmx":
+        from search._bmx import build_bmx, query_bmx
+        bm25_retriever = build_bmx(corpus=corpus, model_dir="bm25_models/bm25", build=False, k1=k1, b=b, alpha=alpha, beta=beta)
+
+        def query_bm25_fn(query: str, k: int):
+            return query_bmx(retriever=bm25_retriever, query=query, k=k)
     else:
         # Handle bm25s variants
         corpus_text = [doc["texto"] for doc in corpus]
@@ -431,25 +454,43 @@ def get_bm25_parameter_grid(variant: BM25Variant) -> dict:
 
     Based on: Kamphuis et al. 2020 - Which BM25 Do You Mean?
     https://link.springer.com/chapter/10.1007/978-3-030-45442-5_4
+
+    For BMX: Li et al. 2024 - BMX: Entropy-weighted Similarity and Semantic-enhanced Lexical Search
+    https://arxiv.org/abs/2408.06643
     """
     # Common parameters for all variants
     k1_values = [0.5, 0.9, 1.2, 1.5, 2.0]
     b_values = [0.0, 0.3, 0.5, 0.75, 1.0]
 
-    if variant in ("bm25l", "bm25+"):
+    if variant == "bmx":
+        # BMX-specific parameters: alpha (entropy normalization) and beta (semantic similarity)
+        alpha_values = [0.5, 0.75, 1.0, 1.25, 1.5]
+        beta_values = [0.0, 0.25, 0.5, 0.75, 1.0]
+        return {
+            "k1": k1_values,
+            "b": b_values,
+            "delta": [0.5],  # Not used by BMX
+            "alpha": alpha_values,
+            "beta": beta_values
+        }
+    elif variant in ("bm25l", "bm25+"):
         # BM25L and BM25+ require delta parameter
         delta_values = [0.0, 0.5, 1.0, 1.5]
         return {
             "k1": k1_values,
             "b": b_values,
-            "delta": delta_values
+            "delta": delta_values,
+            "alpha": [None],  # Not used
+            "beta": [None]    # Not used
         }
     else:
-        # Robertson, Lucene, ATIRE don't use delta
+        # Robertson, Lucene, ATIRE don't use delta, alpha, or beta
         return {
             "k1": k1_values,
             "b": b_values,
-            "delta": [0.5]  # Single value (will be ignored)
+            "delta": [0.5],   # Single value (will be ignored)
+            "alpha": [None],  # Not used
+            "beta": [None]    # Not used
         }
 
 
@@ -481,7 +522,9 @@ def grid_search_bm25(
     param_combinations = list(itertools.product(
         param_grid["k1"],
         param_grid["b"],
-        param_grid["delta"]
+        param_grid["delta"],
+        param_grid["alpha"],
+        param_grid["beta"]
     ))
 
     total_combinations = len(param_combinations)
@@ -498,12 +541,17 @@ def grid_search_bm25(
     results = []
     from tqdm import tqdm
 
-    for i, (k1, b, delta) in enumerate(tqdm(param_combinations, desc=f"Grid Search ({variant})")):
-        logger.info(f"[{i+1}/{total_combinations}] Evaluating k1={k1}, b={b}, delta={delta}")
+    for i, (k1, b, delta, alpha, beta) in enumerate(tqdm(param_combinations, desc=f"Grid Search ({variant})")):
+        param_str = f"k1={k1}, b={b}, delta={delta}"
+        if alpha is not None:
+            param_str += f", alpha={alpha}"
+        if beta is not None:
+            param_str += f", beta={beta}"
+        logger.info(f"[{i+1}/{total_combinations}] Evaluating {param_str}")
 
         try:
             # Create retriever with these parameters
-            retrieve_fn = create_bm25_retriever(variant, db_path, k1=k1, b=b, delta=delta)
+            retrieve_fn = create_bm25_retriever(variant, db_path, k1=k1, b=b, delta=delta, alpha=alpha, beta=beta)
 
             # Evaluate
             metrics = compute_ir_metrics(
@@ -520,13 +568,15 @@ def grid_search_bm25(
                 "k1": k1,
                 "b": b,
                 "delta": delta if variant in ("bm25l", "bm25+") else None,
+                "alpha": alpha if variant == "bmx" else None,
+                "beta": beta if variant == "bmx" else None,
                 "metrics": metrics,
                 "primary_score": metrics.get("map", 0.0)  # Use MAP as primary metric
             }
             results.append(config)
 
         except Exception as e:
-            logger.error(f"Error evaluating k1={k1}, b={b}, delta={delta}: {e}")
+            logger.error(f"Error evaluating {param_str}: {e}")
             continue
 
     # Sort by primary score (MAP)
@@ -542,8 +592,15 @@ def grid_search_bm25(
     print("-"*100)
 
     for i, config in enumerate(results[:top_n], 1):
-        print(f"\n#{i} - k1={config['k1']}, b={config['b']}" +
-              (f", delta={config['delta']}" if config['delta'] is not None else ""))
+        params = f"k1={config['k1']}, b={config['b']}"
+        if config['delta'] is not None:
+            params += f", delta={config['delta']}"
+        if config['alpha'] is not None:
+            params += f", alpha={config['alpha']}"
+        if config['beta'] is not None:
+            params += f", beta={config['beta']}"
+
+        print(f"\n#{i} - {params}")
         print(f"  MAP: {config['metrics']['map']:.4f}")
         print(f"  MRR@10: {config['metrics']['mrr@10']:.4f}")
         print(f"  P@10: {config['metrics']['precision@10']:.4f}")
@@ -570,11 +627,12 @@ def run_grid_search_all_variants(
 ):
     """Run grid search for all BM25 variants and compare."""
     variants: list[BM25Variant] = [
-        "robertson",
-        "lucene",
-        "atire",
-        "bm25l",
-        "bm25+"
+        # "robertson",
+        # "lucene",
+        # "atire",
+        # "bm25l",
+        # "bm25+",
+        "bmx"
     ]
 
     all_best_configs = {}
@@ -609,8 +667,14 @@ def run_grid_search_all_variants(
 
         for rank, (variant, config) in enumerate(sorted_variants, 1):
             print(f"\n#{rank} {variant.upper()}")
-            print(f"  Parameters: k1={config['k1']}, b={config['b']}" +
-                  (f", delta={config['delta']}" if config['delta'] is not None else ""))
+            params = f"k1={config['k1']}, b={config['b']}"
+            if config['delta'] is not None:
+                params += f", delta={config['delta']}"
+            if config.get('alpha') is not None:
+                params += f", alpha={config['alpha']}"
+            if config.get('beta') is not None:
+                params += f", beta={config['beta']}"
+            print(f"  Parameters: {params}")
             print(f"  MAP: {config['metrics']['map']:.4f}")
             print(f"  MRR@10: {config['metrics']['mrr@10']:.4f}")
             print(f"  P@10: {config['metrics']['precision@10']:.4f}")

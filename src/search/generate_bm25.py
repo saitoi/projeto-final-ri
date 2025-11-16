@@ -8,6 +8,7 @@
 #     "prettytable",
 #     "pydantic-settings",
 #     "pyserini",
+#     "baguetter",
 # ]
 # ///
 
@@ -69,29 +70,42 @@ def load_corpus(conn: DuckDBPyConnection) -> list[dict]:
 
 def build_bm25(
     conn: DuckDBPyConnection, model_dir: str, variant: str = "lucene", *, build: bool = False,
-    k1: float = 1.5, b: float = 0.75, delta: float = 0.5
+    k1: float = 1.5, b: float = 0.75, delta: float = 0.5,
+    alpha: float | None = None, beta: float | None = None
 ) -> bm25s.BM25 | Any:
     """
-    Build or load BM25 retriever. Supports both bm25s and pyserini variants.
+    Build or load BM25 retriever. Supports bm25s, pyserini, and bmx variants.
 
     For pyserini variant, returns a dict with:
         - 'searcher': pyserini LuceneSearcher instance
         - 'corpus': corpus data
         - 'doc_ids': document IDs mapping
 
+    For bmx variant, returns a dict with:
+        - 'bmx_index': BMXSparseIndex instance
+        - 'corpus': corpus data
+        - 'doc_ids': document IDs mapping
+
     Args:
         conn: DuckDB connection
         model_dir: Directory to save/load model
-        variant: BM25 variant (robertson, lucene, atire, bm25l, bm25+, pyserini)
+        variant: BM25 variant (robertson, lucene, atire, bm25l, bm25+, pyserini, bmx)
         build: Force rebuild even if model exists
         k1: BM25 k1 parameter (term frequency saturation)
         b: BM25 b parameter (length normalization)
         delta: BM25 delta parameter (for bm25l and bm25+ only)
+        alpha: BMX alpha parameter (entropy normalization weight, for bmx only)
+        beta: BMX beta parameter (semantic similarity weight, for bmx only)
     """
     if variant == "pyserini":
         from _pyserini import build_pyserini
         corpus = load_corpus(conn=conn)
         return build_pyserini(corpus=corpus, model_dir=model_dir, build=build)
+
+    if variant == "bmx":
+        from _bmx import build_bmx
+        corpus = load_corpus(conn=conn)
+        return build_bmx(corpus=corpus, model_dir=model_dir, build=build, k1=k1, b=b, alpha=alpha, beta=beta)
 
     model_path = pathlib.Path(model_dir + "_" + variant)
 
@@ -121,10 +135,10 @@ def query_bm25(retriever: Union[bm25s.BM25, dict], query: str, k: int = 10,
                use_rm3: bool = False, rm3_fb_docs: int = 10, rm3_fb_terms: int = 10,
                rm3_original_query_weight: float = 0.5) -> list[dict[str, Any]]:
     """
-    Query BM25 index. Supports both bm25s and pyserini retrievers.
+    Query BM25 index. Supports bm25s, pyserini, and bmx retrievers.
 
     Args:
-        retriever: BM25 retriever (bm25s.BM25 or pyserini dict)
+        retriever: BM25 retriever (bm25s.BM25, pyserini dict, or bmx dict)
         query: Search query
         k: Number of results
         use_rm3: Enable RM3 for pyserini variant
@@ -146,6 +160,15 @@ def query_bm25(retriever: Union[bm25s.BM25, dict], query: str, k: int = 10,
             rm3_fb_docs=rm3_fb_docs,
             rm3_fb_terms=rm3_fb_terms,
             rm3_original_query_weight=rm3_original_query_weight
+        )
+
+    # Check if bmx
+    if isinstance(retriever, dict) and 'bmx_index' in retriever:
+        from _bmx import query_bmx
+        return query_bmx(
+            retriever=retriever,
+            query=query,
+            k=k,
         )
 
     # bm25s variant

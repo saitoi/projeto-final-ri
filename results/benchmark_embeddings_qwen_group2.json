@@ -1,0 +1,33 @@
+{
+  "method": "Embeddings (qwen)",
+  "query_group": 2,
+  "query_group_name": "expression from LLM question",
+  "num_queries": 50,
+  "num_queries_with_judgments": 150,
+  "metrics": {
+    "precision@1": 0.88,
+    "recall@1": 0.0741972471972472,
+    "ndcg@1": 0.82,
+    "precision@3": 0.7,
+    "recall@3": 0.17557431457431455,
+    "ndcg@3": 0.7035606723434058,
+    "precision@5": 0.58,
+    "recall@5": 0.24235653235653234,
+    "ndcg@5": 0.631123402179544,
+    "precision@10": 0.43200000000000005,
+    "recall@10": 0.36045177045177046,
+    "ndcg@10": 0.5640389286125316,
+    "precision@100": 0.08259999999999999,
+    "recall@100": 0.6768051948051947,
+    "ndcg@100": 0.6829539662053521,
+    "precision@1000": 0.010700000000000001,
+    "recall@1000": 0.8763509823509824,
+    "ndcg@1000": 0.7213535561141036,
+    "mrr@10": 0.919,
+    "map": 0.3990496614495289
+  },
+  "primary_score": 0.3990496614495289,
+  "variant_type": "embeddings",
+  "embedding_variant": "qwen",
+  "model_name": "Qwen/Qwen3-Embedding-0.6B"
+}

@@ -1,0 +1,33 @@
+{
+  "method": "Embeddings (qwen)",
+  "query_group": 3,
+  "query_group_name": "group-3",
+  "num_queries": 50,
+  "num_queries_with_judgments": 150,
+  "metrics": {
+    "precision@1": 0.98,
+    "recall@1": 0.0878983793983794,
+    "ndcg@1": 0.98,
+    "precision@3": 0.8,
+    "recall@3": 0.2143861693861694,
+    "ndcg@3": 0.8305362291193635,
+    "precision@5": 0.688,
+    "recall@5": 0.30406349206349204,
+    "ndcg@5": 0.7570789538599737,
+    "precision@10": 0.5,
+    "recall@10": 0.43998457098457094,
+    "ndcg@10": 0.6542050445691361,
+    "precision@100": 0.0866,
+    "recall@100": 0.7597505827505827,
+    "ndcg@100": 0.7681378551732425,
+    "precision@1000": 0.01056,
+    "recall@1000": 0.9267556332556333,
+    "ndcg@1000": 0.8000417775042501,
+    "mrr@10": 0.98,
+    "map": 0.4880318033358313
+  },
+  "primary_score": 0.4880318033358313,
+  "variant_type": "embeddings",
+  "embedding_variant": "qwen",
+  "model_name": "Qwen/Qwen3-Embedding-0.6B"
+}

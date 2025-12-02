@@ -10,38 +10,29 @@ from .embedding_queries import (
     SEARCH_EMBEDDING_TEXTO,
 )
 
-from .preprocess_queries import (
-    CREATE_DOCS_TABLE,
-    CREATE_QUERIES_TABLE,
-    CREATE_QUERIES_REL_TABLE,
-    EXTRACT_TEXT,
-    REPLACEMENTS,
-    REMOVALS,
-    NORMALIZATIONS,
-)
-
 from .bm25_queries import (
     TOTAL_COUNT,
     GET_DOC_TEXTS,
+    get_doc_texts_query,
 )
 
+# Note: preprocess queries are imported directly in their respective preprocessors
+# - tcu.py imports from queries.preprocess_queries_tcu
+# - ulysses.py imports from queries.preprocess_queries_ulysses
+# This avoids redefinition conflicts in __init__.py
+
 __all__ = [
-    CREATE_DOCS_TABLE,
-    CREATE_QUERIES_TABLE,
-    CREATE_QUERIES_REL_TABLE,
-    EXTRACT_TEXT,
-    REPLACEMENTS,
-    REMOVALS,
-    NORMALIZATIONS,
-    CREATE_CHUNKS_TABLE,
-    CREATE_CHUNKS_EMBEDDINGS_TABLE,
-    CREATE_EMBEDDINGS_TABLE,
-    GET_DOCS_FOR_CHUNKING,
-    INSERT_CHUNK,
-    GET_PENDING_CHUNKS,
-    INSERT_CHUNK_EMBEDDING,
-    AGGREGATE_MEAN_POOLING,
-    TOTAL_COUNT,
-    GET_DOC_TEXTS,
-    SEARCH_EMBEDDING_TEXTO,
+    "CREATE_CHUNKS_TABLE",
+    "CREATE_CHUNKS_EMBEDDINGS_TABLE",
+    "CREATE_EMBEDDINGS_TABLE",
+    "GET_DOCS_FOR_CHUNKING",
+    "INSERT_CHUNK",
+    "GET_PENDING_CHUNKS",
+    "INSERT_CHUNK_EMBEDDING",
+    "AGGREGATE_MEAN_POOLING",
+    "TOTAL_COUNT",
+    "GET_DOC_TEXTS",
+    "get_doc_texts_query",
+    "SEARCH_EMBEDDING_TEXTO",
 ]
+

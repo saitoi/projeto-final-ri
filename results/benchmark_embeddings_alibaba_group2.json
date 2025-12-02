@@ -1,0 +1,33 @@
+{
+  "method": "Embeddings (alibaba)",
+  "query_group": 2,
+  "query_group_name": "expression from LLM question",
+  "num_queries": 50,
+  "num_queries_with_judgments": 150,
+  "metrics": {
+    "precision@1": 0.74,
+    "recall@1": 0.06015684315684315,
+    "ndcg@1": 0.6866666666666668,
+    "precision@3": 0.6066666666666667,
+    "recall@3": 0.14877322677322677,
+    "ndcg@3": 0.6022145901155451,
+    "precision@5": 0.528,
+    "recall@5": 0.21833943833943834,
+    "ndcg@5": 0.5559128077866118,
+    "precision@10": 0.41200000000000003,
+    "recall@10": 0.3428450438450439,
+    "ndcg@10": 0.5081422599759489,
+    "precision@100": 0.0806,
+    "recall@100": 0.660938394938395,
+    "ndcg@100": 0.6268714617583291,
+    "precision@1000": 0.01046,
+    "recall@1000": 0.8532979242979244,
+    "ndcg@1000": 0.6693208045824807,
+    "mrr@10": 0.8318333333333334,
+    "map": 0.3601217095738287
+  },
+  "primary_score": 0.3601217095738287,
+  "variant_type": "embeddings",
+  "embedding_variant": "alibaba",
+  "model_name": "Alibaba-NLP/gte-multilingual-base"
+}

@@ -74,7 +74,6 @@ def chunk_embedding(
         if not entries:
             return
         embeddings = create_embeddings(texts, model)
-        print(len(embeddings))
         rows = [
             (int(docid), int(chunk_index), embedding[:768], variant)
             for (docid, chunk_index), embedding in zip(entries, embeddings, strict=True)
@@ -131,7 +130,6 @@ def query_embeddings(
         res = conn.execute(
                 queries.SEARCH_EMBEDDING_TEXTO, [query_embedding[:768], variant, k]
         ).fetchall()
-        # similaridade sendo ignorada por enquanto
         res_dict: list[dict[str, Any]] = [
             {"rank": i, "docid": d, "texto": t, "score": s}
             for i, (d, t, s) in enumerate(res, start=1)

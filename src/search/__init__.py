@@ -15,7 +15,7 @@ __all__ = [
     "create_chunks",
     "query_hybrid",
     "normalize_scores",
-    "reciprocal_rank_fusion",
+    "fusion_results",
     "rerank_results",
     "create_ranker",
 ]

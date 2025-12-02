@@ -1,19 +1,3 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "bm25s",
-#     "duckdb",
-#     "flashrank",
-#     "langchain-text-splitters",
-#     "nltk",
-#     "prettytable",
-#     "pydantic-settings",
-#     "sentence-transformers",
-#     "tiktoken",
-#     "torch>=2.2",
-# ]
-# ///
-
 import sys
 from pathlib import Path
 from typing import Sequence, Any
@@ -40,20 +24,26 @@ def show_results(results: Sequence[dict]) -> None:
         return
 
     table = PrettyTable()
-    table.field_names = ["Rank", "DocID", "Variante", "Tema", "Snippet"]
+    table.field_names = ["Rank", "DocID", "Score", "Variante", "Tema", "Snippet"]
     table.align["Snippet"] = "l"
     table.align["Tema"] = "l"
     table.align["Subtema"] = "l"
+    table.align["Score"] = "r"
     table.max_width["Tema"] = 25
     table.max_width["Subtema"] = 25
 
     for item in results:
-        snippet = item.get("enunciado") or item.get("excerto") or item.get("text") or ""
+        snippet = item.get("texto") or item.get("enunciado") or item.get("excerto") or item.get("text") or ""
         snippet = snippet[:100] + "..." if len(snippet) > 100 else snippet
+
+        # Format score to 4 decimal places if available
+        score = item.get("score")
+        score_str = f"{score:.4f}" if score is not None else "N/A"
 
         table.add_row([
             item.get("rank", ""),
             item.get("docid", ""),
+            score_str,
             item.get("variant", ""),
             (item.get("tema") or "")[:25],
             snippet,
@@ -134,9 +124,16 @@ def main() -> None:
                     bm25_dir=settings.bm25_dir,
                     k1=settings.k1,
                     b=settings.b,
+                    hybrid_variant=settings.hybrid_variant,
+                    fusion_method=settings.fusion_method,
+                    fusion_norm=settings.fusion_norm,
+                    fusion_k=settings.fusion_k,
                 )
                 for item in results:
-                    item["variant"] = f"{settings.bm25_variant}+{settings.embedding_variant}"
+                    if settings.hybrid_variant == "ranker":
+                        item["variant"] = f"{settings.bm25_variant}+{settings.embedding_variant}+reranker"
+                    else:
+                        item["variant"] = f"{settings.bm25_variant}+{settings.embedding_variant}+{settings.fusion_method}"
             else:
                 raise ValueError(f"Modelo desconhecido: {settings.model}")
 

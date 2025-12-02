@@ -1,89 +1,157 @@
 from typing import Any
-import flashrank
-from flashrank import Ranker, RerankRequest
+from rerankers import Reranker
+from ranx import Run, fuse
 from settings import get_settings, get_logger
 
 logger = get_logger(__name__)
 
 
-def create_ranker() -> Ranker:
-    """Create and configure a Flashrank reranker model."""
+def create_ranker() -> Reranker:
+    """Create and configure a reranker model using rerankers library."""
     settings = get_settings()
 
-    # Configure flashrank model file mappings
-    flashrank.Config.model_file_map["mmarco-mMiniLM-L12-H384-v1"] = "flashrank-mmarco-mMiniLM-L12.onnx"
-    flashrank.Config.model_file_map["gte-multilingual-reranker-base"] = "flashrank-gte-multilingual-base.onnx"
-
     logger.info(f"Loading ranker model: {settings.ranker_model}")
-    model = Ranker(model_name=settings.ranker_model, cache_dir=settings.ranker_cache_dir)
+
+    # Use reranker with GPU support
+    # trust_remote_code=True is needed for some models like Alibaba GTE
+    # batch_size=1 to avoid padding token issues with some models (e.g., Qwen)
+    model = Reranker(
+        settings.ranker_model,
+        model_type='cross-encoder',
+        device=f'cuda:{settings.ranker_gpu_id}' if settings.ranker_use_gpu else 'cpu',
+        model_kwargs={'trust_remote_code': True},
+        batch_size=1  # Process one document at a time to avoid padding token errors
+    )
 
     return model
 
 
-def reciprocal_rank_fusion(
+def fusion_results(
     bm25_results: list[dict[str, Any]],
     embedding_results: list[dict[str, Any]],
     k: int = 10,
-    k_rrf: int = 60
+    method: str = "rrf",
+    norm: str = "min-max",
+    fusion_k: int = 60,
+    extra_params: dict | None = None
 ) -> list[dict[str, Any]]:
     """
-    Combine BM25 and embedding results using Reciprocal Rank Fusion (RRF).
+    Combine BM25 and embedding results using ranx fusion algorithms.
 
     Args:
-        bm25_results: Results from BM25 search (must have 'rank' field)
-        embedding_results: Results from embedding search (must have 'rank' field)
+        bm25_results: Results from BM25 search (must have 'rank' and 'score' fields)
+        embedding_results: Results from embedding search (must have 'rank' and 'score' fields)
         k: Number of top results to return
-        k_rrf: RRF constant (default 60)
+        method: Fusion method from ranx (rrf, min, max, sum, etc.)
+        norm: Normalization method (min-max, max, sum, zmuv, rank, borda)
+        fusion_k: K parameter for fusion algorithms (e.g., RRF constant)
+        extra_params: Extra parameters for fusion methods (gamma, weights, phi, etc.)
 
     Returns:
         Combined and reranked results
     """
-    doc_lookup: dict[int, dict[str, Any]] = dict()
-    for entry in bm25_results:
-        docid = entry["docid"]
-        doc_lookup[docid] = {"bm25_rank": entry.get("rank"), "emb_rank": None, "data": entry}
+    settings = get_settings()
 
-    for entry in embedding_results:
+    # Build doc metadata lookup
+    doc_lookup: dict[int, dict[str, Any]] = {}
+    for entry in bm25_results + embedding_results:
         docid = entry["docid"]
         if docid not in doc_lookup:
-            doc_lookup[docid] = {"bm25_rank": None, "emb_rank": None, "data": entry}
-        doc_lookup[docid]["emb_rank"] = entry.get("rank")
+            doc_lookup[docid] = entry
 
-    def _rrf(docid: int) -> float:
-        # Documento faltante: Penalidade de 1.5 * k
-        bm25_r = doc_lookup[docid]["bm25_rank"] if doc_lookup[docid]["bm25_rank"] is not None else 3/2 * k
-        emb_r = doc_lookup[docid]["emb_rank"] if doc_lookup[docid]["emb_rank"] is not None else 3/2 * k
-        return 1 / (k_rrf + bm25_r) + 1 / (k_rrf + emb_r)
+    # Convert results to ranx Run format
+    bm25_run_dict = {}
+    emb_run_dict = {}
 
-    hybrid_scores = []
-    for docid, doc_info in doc_lookup.items():
-        entry = doc_info["data"]
-        hybrid_scores.append({
+    # Use a dummy query ID since we're only doing one query at a time
+    query_id = "q1"
+
+    for entry in bm25_results:
+        docid = str(entry["docid"])
+        score = entry.get("score", 1.0 / (entry.get("rank", 1)))
+        if query_id not in bm25_run_dict:
+            bm25_run_dict[query_id] = {}
+        bm25_run_dict[query_id][docid] = score
+
+    for entry in embedding_results:
+        docid = str(entry["docid"])
+        score = entry.get("score", 1.0 / (entry.get("rank", 1)))
+        if query_id not in emb_run_dict:
+            emb_run_dict[query_id] = {}
+        emb_run_dict[query_id][docid] = score
+
+    # Create Run objects
+    bm25_run = Run(bm25_run_dict, name="bm25")
+    emb_run = Run(emb_run_dict, name="embedding")
+
+    # Prepare fusion parameters
+    params = {}
+
+    # Use extra_params if provided, otherwise use defaults
+    if extra_params:
+        params = extra_params.copy()
+    else:
+        if method == "rrf":
+            params = {"k": fusion_k}
+        elif method == "gmnz":
+            # gamma parameter for CombGMNZ (typical range: 0.1 to 2.0)
+            params = {"gamma": 1.0}
+        elif method in ["wsum", "wmnz", "mixed"]:
+            # Equal weights for both retrievers
+            params = {"weights": [0.5, 0.5]}
+        elif method in ["w_bordafuse", "w_condorcet"]:
+            # Equal weights for weighted variants
+            params = {"weights": [0.5, 0.5]}
+        elif method == "rbc":
+            # phi parameter for RBC (typical range: 0.1 to 1.0)
+            params = {"phi": 0.5}
+        # Methods requiring training (bayesfuse, mapfuse, posfuse, probfuse, segfuse, slidefuse)
+        # are not supported without qrels training data
+        elif method in ["bayesfuse", "mapfuse", "posfuse", "probfuse", "segfuse", "slidefuse"]:
+            logger.warning(f"Method {method} requires training data (qrels), skipping...")
+            return []
+
+    # Fuse the runs
+    logger.info(f"Fusing results using method={method}, norm={norm}")
+    combined_run = fuse(
+        runs=[bm25_run, emb_run],
+        norm=norm,
+        method=method,
+        params=params if params else None
+    )
+
+    # Extract results and format them
+    # Use __getitem__ which returns dict, not the numba TypedDict
+    fused_scores = combined_run[query_id] if query_id in combined_run.run else {}
+
+    # Sort by score descending
+    sorted_results = sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
+
+    # Format results
+    results = []
+    for idx, (docid_str, score) in enumerate(sorted_results[:k], start=1):
+        docid = int(docid_str)
+        entry = doc_lookup[docid]
+        results.append({
+            "rank": idx,
             "docid": docid,
+            "score": float(score),
             "texto": entry.get("texto", entry.get("text", "")),
             "tema": entry.get("tema"),
             "subtema": entry.get("subtema"),
             "enunciado": entry.get("enunciado"),
             "excerto": entry.get("excerto"),
-            "score": _rrf(docid),
-            "variant": f"rrf - {entry.get('variant', '')}",
+            "variant": f"{method} - {entry.get('variant', '')}",
         })
 
-    # Sort by RRF score (descending)
-    hybrid_scores.sort(key=lambda x: x["score"], reverse=True)
-
-    # Add rank and return top k
-    for idx, item in enumerate(hybrid_scores[:k], start=1):
-        item["rank"] = idx
-
-    return hybrid_scores[:k]
+    return results
 
 
 def rerank_results(
     query: str,
     bm25_results: list[dict[str, Any]],
     embedding_results: list[dict[str, Any]],
-    ranker: Ranker,
+    ranker: Reranker,
     k: int = 10
 ) -> list[dict[str, Any]]:
     """
@@ -93,7 +161,7 @@ def rerank_results(
         query: The search query
         bm25_results: Results from BM25 search
         embedding_results: Results from embedding search
-        ranker: Flashrank Ranker instance
+        ranker: Reranker instance from rerankers library
         k: Number of top results to return
 
     Returns:
@@ -108,39 +176,50 @@ def rerank_results(
             all_results[docid] = entry
 
     passages = []
+    docid_to_meta = {}
     for docid, entry in all_results.items():
         text = entry.get("texto") or entry.get("text") or ""
         # if not text and entry.get("enunciado"):
         #     text = entry.get("enunciado", "")
-        passages.append({
-            "id": docid,
-            "text": text,
-            "meta": entry
-        })
+        passages.append(text)
+        docid_to_meta[len(passages) - 1] = {"docid": docid, "entry": entry}
 
     if not passages:
         logger.warning("No passages to rerank")
         return []
 
-    # Rerank
+    # Rerank using rerankers library
     logger.info(f"Reranking {len(passages)} passages")
-    rerank_request = RerankRequest(query=query, passages=passages)
-    reranked = ranker.rerank(rerank_request)
+    reranked = ranker.rank(query, passages)
+
+    # Get top k results
+    top_results = reranked.top_k(k)
+
+    # Normalize scores to [0, 1] using sigmoid for better interpretability
+    import math
 
     # Format results
     results = []
-    for idx, item in enumerate(reranked[:k], start=1):
-        meta = item.get("meta", {})
+    for idx, item in enumerate(top_results, start=1):
+        # item.doc_id is the index in the original passages list
+        meta_info = docid_to_meta[item.doc_id]
+        docid = meta_info["docid"]
+        entry = meta_info["entry"]
+
+        # Apply sigmoid to convert logits to probabilities [0, 1]
+        # sigmoid(x) = 1 / (1 + e^(-x))
+        normalized_score = 1.0 / (1.0 + math.exp(-float(item.score)))
+
         results.append({
             "rank": idx,
-            "docid": item.get("id"),
-            "score": float(item.get("score", 0.0)),  # Convert numpy float32 to Python float
-            "texto": item.get("text", ""),
-            "tema": meta.get("tema"),
-            "subtema": meta.get("subtema"),
-            "enunciado": meta.get("enunciado"),
-            "excerto": meta.get("excerto"),
-            "variant": f"reranker - {meta.get('variant')}",
+            "docid": docid,
+            "score": normalized_score,  # Now between 0 and 1
+            "texto": item.text,
+            "tema": entry.get("tema"),
+            "subtema": entry.get("subtema"),
+            "enunciado": entry.get("enunciado"),
+            "excerto": entry.get("excerto"),
+            "variant": f"reranker - {entry.get('variant')}",
         })
 
     return results

@@ -50,19 +50,24 @@ stemmer = StemmerWrapper(RSLPStemmer())
 logger = get_logger(__name__)
 
 def load_corpus(conn: DuckDBPyConnection) -> list[dict]:
-    rows = conn.execute(queries.GET_DOC_TEXTS).fetchall()
+    from queries.bm25_queries import get_doc_texts_query
+
+    # Get dynamic query based on available columns
+    query = get_doc_texts_query(conn)
+    rows = conn.execute(query).fetchall()
     total = len(rows)
 
     corpus: list[dict] = []
     pbar = tqdm(rows, total=total or None, desc="Loading corpus", unit="doc")
-    for docid, texto, tema, subtema, enunciado, excerto in pbar:
+    for row in pbar:
+        docid, texto, tema, subtema, enunciado, excerto = row
         corpus.append({
             "docid": int(docid),
             "texto": texto,
-            "tema": tema,
-            "subtema": subtema,
-            "enunciado": enunciado,
-            "excerto": excerto,
+            "tema": tema if tema else None,
+            "subtema": subtema if subtema else None,
+            "enunciado": enunciado if enunciado else None,
+            "excerto": excerto if excerto else None,
         })
 
     return corpus
@@ -98,12 +103,18 @@ def build_bm25(
         beta: BMX beta parameter (semantic similarity weight, for bmx only)
     """
     if variant == "pyserini":
-        from _pyserini import build_pyserini
+        if __name__ == "__main__":
+            from search._pyserini import build_pyserini
+        else:
+            from ._pyserini import build_pyserini
         corpus = load_corpus(conn=conn)
         return build_pyserini(corpus=corpus, model_dir=model_dir, build=build)
 
     if variant == "bmx":
-        from _bmx import build_bmx
+        if __name__ == "__main__":
+            from search._bmx import build_bmx
+        else:
+            from ._bmx import build_bmx
         corpus = load_corpus(conn=conn)
         return build_bmx(corpus=corpus, model_dir=model_dir, build=build, k1=k1, b=b, alpha=alpha, beta=beta)
 
@@ -151,7 +162,10 @@ def query_bm25(retriever: Union[bm25s.BM25, dict], query: str, k: int = 10,
     """
     # Check if pyserini
     if isinstance(retriever, dict) and 'searcher' in retriever:
-        from _pyserini import query_pyserini
+        if __name__ == "__main__":
+            from search._pyserini import query_pyserini
+        else:
+            from ._pyserini import query_pyserini
         return query_pyserini(
             retriever=retriever,
             query=query,
@@ -164,7 +178,10 @@ def query_bm25(retriever: Union[bm25s.BM25, dict], query: str, k: int = 10,
 
     # Check if bmx
     if isinstance(retriever, dict) and 'bmx_index' in retriever:
-        from _bmx import query_bmx
+        if __name__ == "__main__":
+            from search._bmx import query_bmx
+        else:
+            from ._bmx import query_bmx
         return query_bmx(
             retriever=retriever,
             query=query,

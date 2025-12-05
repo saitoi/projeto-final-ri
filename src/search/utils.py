@@ -37,7 +37,7 @@ def create_embedding_model(variant: str | None = None) -> SentenceTransformer:
         model = SentenceTransformer(
             model_name,
             trust_remote_code=True,
-            token=settings.hf_token.get_secret_value() if settings.hf_token else None,
+            token=settings.hf_token if settings.hf_token else None,
         )
         model.to(device)
         return model

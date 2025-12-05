@@ -1,0 +1,33 @@
+{
+  "method": "Embeddings (lamdec-gemma)",
+  "query_group": 2,
+  "query_group_name": "expression from LLM question",
+  "num_queries": 50,
+  "num_queries_with_judgments": 150,
+  "metrics": {
+    "precision@1": 0.36,
+    "recall@1": 0.029726939726939725,
+    "ndcg@1": 0.31,
+    "precision@3": 0.2866666666666666,
+    "recall@3": 0.07122344322344322,
+    "ndcg@3": 0.27965519029293906,
+    "precision@5": 0.256,
+    "recall@5": 0.10636330336330337,
+    "ndcg@5": 0.26415034100849516,
+    "precision@10": 0.196,
+    "recall@10": 0.16379653679653677,
+    "ndcg@10": 0.24196783432731622,
+    "precision@100": 0.044000000000000004,
+    "recall@100": 0.3596470196470197,
+    "ndcg@100": 0.32352291544783013,
+    "precision@1000": 0.0088,
+    "recall@1000": 0.7159462759462759,
+    "ndcg@1000": 0.4157073909642227,
+    "mrr@10": 0.43423809523809526,
+    "map": 0.16275791111216184
+  },
+  "primary_score": 0.16275791111216184,
+  "variant_type": "embeddings",
+  "embedding_variant": "lamdec-gemma",
+  "model_name": "LAMDEC/gemma-pgm-pairs"
+}

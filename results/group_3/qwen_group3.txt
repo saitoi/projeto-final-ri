@@ -1,0 +1,45 @@
+
+================================================================================
+Information Retrieval Evaluation: Embeddings (qwen) - group-3
+================================================================================
+Queries: 50
+Queries with relevance judgments: 150
+Query Group: 3 (group-3)
+
+Results:
+--------------------------------------------------------------------------------
+Shallow Metrics (top of ranking):
+  precision@10: 0.5000
+  mrr@10: 0.9800
+  ndcg@10: 0.6542
+
+Deep Metrics (global consistency):
+  map: 0.4880
+  recall@1000: 0.9268
+  ndcg@1000: 0.8000
+
+All Metrics:
+  precision@1: 0.9800
+  precision@3: 0.8000
+  precision@5: 0.6880
+  precision@10: 0.5000
+  recall@1: 0.0879
+  recall@3: 0.2144
+  recall@5: 0.3041
+  recall@10: 0.4400
+  recall@100: 0.7598
+  recall@1000: 0.9268
+  ndcg@1: 0.9800
+  ndcg@3: 0.8305
+  ndcg@5: 0.7571
+  ndcg@10: 0.6542
+  ndcg@100: 0.7681
+  ndcg@1000: 0.8000
+  mrr@10: 0.9800
+  map: 0.4880
+--------------------------------------------------------------------------------
+
+Primary Metric: map
+Primary Score: 0.4880
+================================================================================
+

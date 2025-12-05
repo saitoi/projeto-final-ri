@@ -6,7 +6,6 @@ from typing import Any
 from baguetter.indices import BMXSparseIndex
 from baguetter.indices.sparse.text_preprocessor.text_processor import TextPreprocessorConfig
 from nltk.stem import RSLPStemmer
-from tqdm.auto import tqdm
 
 from settings import get_logger
 

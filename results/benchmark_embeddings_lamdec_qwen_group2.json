@@ -1,0 +1,33 @@
+{
+  "method": "Embeddings (lamdec-qwen)",
+  "query_group": 2,
+  "query_group_name": "expression from LLM question",
+  "num_queries": 50,
+  "num_queries_with_judgments": 150,
+  "metrics": {
+    "precision@1": 0.46,
+    "recall@1": 0.03773559773559774,
+    "ndcg@1": 0.4033333333333334,
+    "precision@3": 0.3133333333333333,
+    "recall@3": 0.0775091575091575,
+    "ndcg@3": 0.3095246951891839,
+    "precision@5": 0.24,
+    "recall@5": 0.09885880785880787,
+    "ndcg@5": 0.26715799925052147,
+    "precision@10": 0.17800000000000002,
+    "recall@10": 0.14766966366966366,
+    "ndcg@10": 0.23508134514037546,
+    "precision@100": 0.046400000000000004,
+    "recall@100": 0.37876745476745477,
+    "ndcg@100": 0.3403061058762946,
+    "precision@1000": 0.00818,
+    "recall@1000": 0.6691652791652791,
+    "ndcg@1000": 0.41131467588929466,
+    "mrr@10": 0.5058333333333334,
+    "map": 0.16216522045027484
+  },
+  "primary_score": 0.16216522045027484,
+  "variant_type": "embeddings",
+  "embedding_variant": "lamdec-qwen",
+  "model_name": "LAMDEC/qwen-pgm-pairs"
+}

@@ -18,7 +18,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from settings import get_settings, Settings, get_logger
-import queries
+from queries.preprocess_queries_tcu import (
+    CREATE_DOCS_TABLE,
+    CREATE_QUERIES_TABLE,
+    CREATE_QUERIES_REL_TABLE,
+    EXTRACT_TEXT,
+    REPLACEMENTS,
+    REMOVALS,
+)
 from preprocess._utils import (
     extract_text,
     remove_accents,
@@ -47,20 +54,20 @@ def run(db_filepath: str):
         # DDLs
 
         logger.info("Creating tables...")
-        conn.execute(queries.CREATE_DOCS_TABLE)
-        conn.execute(queries.CREATE_QUERIES_TABLE)
-        conn.execute(queries.CREATE_QUERIES_REL_TABLE)
+        conn.execute(CREATE_DOCS_TABLE)
+        conn.execute(CREATE_QUERIES_TABLE)
+        conn.execute(CREATE_QUERIES_REL_TABLE)
 
         # DMLs
 
         logger.info("Parsing HTML fields...")
-        conn.execute(queries.EXTRACT_TEXT)
+        conn.execute(EXTRACT_TEXT)
 
         logger.info("Applying replacements...")
-        conn.execute(queries.REPLACEMENTS)
+        conn.execute(REPLACEMENTS)
 
         logger.info("Applying removals...")
-        conn.execute(queries.REMOVALS)
+        conn.execute(REMOVALS)
 
         # Text Normalizations: Não funcionou como esperado para BM25
 

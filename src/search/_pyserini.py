@@ -3,41 +3,35 @@ import pickle
 import shutil
 import subprocess
 import sys
+import json
 from typing import Any
 
 from tqdm.auto import tqdm
+from pyserini.search.lucene import LuceneSearcher
 
-from settings import get_logger
-
-logger = get_logger(__name__)
+# Se você não tiver o get_logger configurado, substitua por print ou logging padrão
+try:
+    from settings import get_logger
+    logger = get_logger(__name__)
+except ImportError:
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
 
 def build_pyserini(corpus: list[dict], model_dir: str, *, build: bool = False) -> dict:
-    """
-    Build or load pyserini BM25 retriever.
-
-    Args:
-        corpus: List of documents with fields (docid, texto, tema, subtema, enunciado, excerto)
-        model_dir: Base directory for models
-        build: If True, force rebuild even if index exists
-
-    Returns:
-        Dict with searcher, corpus, and doc_ids
-    """
-    from pyserini.search.lucene import LuceneSearcher
-    import json
-
     model_path = pathlib.Path(model_dir + "-pyserini")
     index_path = model_path / "index"
     corpus_file = model_path / "corpus.pkl"
 
-    # Load existing index
+    # --- 1. Tentar carregar índice existente ---
     if not build and index_path.exists() and corpus_file.exists():
         logger.info("Loading pyserini retriever from %s", model_path)
         with open(corpus_file, 'rb') as f:
             corpus_data = pickle.load(f)
 
         searcher = LuceneSearcher(str(index_path))
+        searcher.set_language('pt')
         logger.info("Loaded pyserini index with %d documents", searcher.num_docs)
 
         return {
@@ -46,38 +40,41 @@ def build_pyserini(corpus: list[dict], model_dir: str, *, build: bool = False) -
             'doc_ids': corpus_data['doc_ids'],
         }
 
-    # Clean existing index
+    # --- 2. Limpar índice antigo se existir ---
     if model_path.exists():
         logger.info("Removing existing pyserini model at %s", model_path)
         shutil.rmtree(model_path)
 
-    logger.info("Building pyserini BM25 retriever...")
+    logger.info("Building pyserini BM25 retriever (Text Only)...")
 
-    # Prepare corpus for pyserini (JSONL format)
     doc_ids = [doc["docid"] for doc in corpus]
 
-    # Create collection directory
+    # Criar diretórios
     model_path.mkdir(parents=True, exist_ok=True)
     collection_path = model_path / "collection"
     collection_path.mkdir(parents=True, exist_ok=True)
 
     jsonl_file = collection_path / "docs.jsonl"
 
-    # Write documents in JSONL format
+    # --- 3. Escrever JSONL (Apenas Texto) ---
     logger.info("Writing %d documents to JSONL...", len(corpus))
     with open(jsonl_file, 'w', encoding='utf-8') as f:
         for doc in tqdm(corpus, desc="Preparing documents"):
+            # Limpeza básica para evitar erros de nulos, se houver
+            conteudo = doc.get("texto")
+            if conteudo is None:
+                conteudo = ""
+            
             json_doc = {
                 "id": str(doc["docid"]),
-                "contents": doc["texto"],
+                "contents": conteudo, # Apenas o texto, conforme solicitado
             }
             f.write(json.dumps(json_doc, ensure_ascii=False) + '\n')
 
-    # Build index using pyserini CLI
-    logger.info("Building Lucene index with Portuguese stemmer...")
+    # --- 4. Construir Índice (Configuração PT-BR) ---
+    logger.info("Building Lucene index with Portuguese settings...")
     index_path.mkdir(parents=True, exist_ok=True)
 
-    # Use python -m to invoke pyserini indexer
     cmd = [
         sys.executable, "-m", "pyserini.index.lucene",
         "--collection", "JsonCollection",
@@ -86,11 +83,10 @@ def build_pyserini(corpus: list[dict], model_dir: str, *, build: bool = False) -
         "--generator", "DefaultLuceneDocumentGenerator",
         "--threads", "4",
         "--storePositions", "--storeDocvectors", "--storeRaw",
-        "--language", "pt",
-        "--stemmer", "porter"
+        "--language", "pt"
     ]
 
-    logger.info(f"Running indexer...")
+    logger.info("Running indexer...")
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
@@ -98,13 +94,13 @@ def build_pyserini(corpus: list[dict], model_dir: str, *, build: bool = False) -
         raise RuntimeError(f"Pyserini indexing failed: {result.stderr}")
 
     logger.info("Index built successfully")
-    logger.info(f"Indexer output:\n{result.stdout}")
 
-    # Create searcher
+    # --- 5. Inicializar Searcher ---
     searcher = LuceneSearcher(str(index_path))
+    searcher.set_language('pt') # Importante definir aqui também
     logger.info("Searcher created with %d documents", searcher.num_docs)
 
-    # Save corpus metadata
+    # Salvar metadados
     corpus_data = {
         'corpus': corpus,
         'doc_ids': doc_ids,
@@ -132,29 +128,14 @@ def query_pyserini(
     rm3_original_query_weight: float = 0.5
 ) -> list[dict[str, Any]]:
     """
-    Query using pyserini retriever with optional RM3.
-
-    Args:
-        retriever: Pyserini retriever dict from build_pyserini()
-        query: Search query string
-        k: Number of results to return
-        use_rm3: Enable RM3 pseudo-relevance feedback
-        rm3_fb_docs: Number of feedback documents for RM3
-        rm3_fb_terms: Number of expansion terms for RM3
-        rm3_original_query_weight: Weight of original query (0.0-1.0)
-
-    Returns:
-        List of matched documents with scores
+    Realiza a busca no índice Pyserini.
     """
     searcher = retriever['searcher']
     corpus = retriever['corpus']
 
-    # Configure RM3 if requested
+    # Configurar RM3 (Query Expansion)
     if use_rm3:
-        logger.info(
-            f"Using RM3 with pyserini "
-            f"(fb_docs={rm3_fb_docs}, fb_terms={rm3_fb_terms}, weight={rm3_original_query_weight})"
-        )
+        # RM3 é útil se o vocabulário da query for muito diferente do texto jurídico
         searcher.set_rm3(
             fb_terms=rm3_fb_terms,
             fb_docs=rm3_fb_docs,
@@ -163,27 +144,34 @@ def query_pyserini(
     else:
         searcher.unset_rm3()
 
-    # Search
-    hits = searcher.search(query, k=k)
+    # Busca
+    try:
+        hits = searcher.search(query, k=k)
+    except Exception as e:
+        logger.error(f"Error searching for query '{query}': {e}")
+        return []
 
-    # Create doc_id to corpus mapping
+    # Mapa para recuperação rápida do documento original
+    # Nota: Se o corpus for gigante, isso pode consumir muita RAM. 
+    # Idealmente, criar esse mapa fora da função de query ou usar o índice reverso.
     doc_id_map = {str(doc["docid"]): doc for doc in corpus}
 
-    # Format results
     matches: list[dict] = []
     for rank, hit in enumerate(hits, start=1):
         doc_id = hit.docid
         score = hit.score
-
-        # Get document from corpus
-        doc = doc_id_map.get(doc_id, {})
-
+        
+        # Recuperar documento original
+        doc = doc_id_map.get(doc_id)
+        
+        # Se o doc não estiver no mapa (erro de sincronia), criamos um placeholder
         if not doc:
-            logger.warning(f"Document {doc_id} not found in corpus")
+            logger.warning(f"Document {doc_id} found in index but missing in corpus map")
+            continue
 
         matches.append({
             "rank": rank,
-            "docid": int(doc_id) if doc else None,
+            "docid": doc["docid"],
             "score": float(score),
             "texto": doc.get("texto", ""),
             "tema": doc.get("tema"),
